@@ -1,9 +1,14 @@
 {
   "name": "figr-frontend-assignment",
   "private": true,
-  "description": "Starter kit for the Figr frontend engineer assignment",
-  "engines": { "node": ">=18" },
+  "description": "Figr frontend engineer assignment — board viewer",
+  "engines": { "node": ">=22.12" },
+  "workspaces": ["frontend"],
   "scripts": {
-    "backend": "node backend/server.js"
+    "start": "node scripts/start.mjs",
+    "backend": "node backend/server.js",
+    "test": "npm run test -w frontend",
+    "typecheck": "npm run typecheck -w frontend",
+    "build:agent": "npm run build:agent -w frontend"
   }
 }
