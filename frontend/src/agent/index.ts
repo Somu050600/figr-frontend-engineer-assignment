@@ -29,6 +29,7 @@ declare global {
 }
 
 const SLOW_CHILDREN_MS = 5_000;
+const FALLBACK_TICK_MS = 150;
 
 function isEditable(t: EventTarget | null): boolean {
   if (!(t instanceof HTMLElement)) return false;
@@ -89,11 +90,15 @@ function boot(): void {
     const lastGeo = new Map<string, string>();
     const lastLive = new Map<string, string>();
     let raf = 0;
+    let fallback = 0;
 
     // Geometry + live values are polled per frame while anything is watched:
     // catches every cause (any scroller, transitions, rebuilds) for a handful of elements (D14).
     const tick = () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(fallback);
       raf = 0;
+      fallback = 0;
       try {
         const geo: Record<string, Geometry | null> = {};
         let geoChanged = false;
@@ -126,8 +131,12 @@ function boot(): void {
         kick();
       }
     };
+    // Browsers stop rAF in off-screen cross-origin iframes, so a timer backs it up:
+    // the inspector still gets live values for a preview panned out of view.
     const kick = () => {
-      if (!raf && (watched.length || inspected.length)) raf = requestAnimationFrame(tick);
+      if (raf || !(watched.length || inspected.length)) return;
+      raf = requestAnimationFrame(tick);
+      fallback = window.setTimeout(tick, FALLBACK_TICK_MS);
     };
 
     const observer = new MutationObserver(() => {

@@ -478,6 +478,7 @@
 	//#endregion
 	//#region src/agent/index.ts
 	var SLOW_CHILDREN_MS = 5e3;
+	var FALLBACK_TICK_MS = 150;
 	function isEditable(t) {
 		if (!(t instanceof HTMLElement)) return false;
 		return t.isContentEditable || t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT";
@@ -526,8 +527,12 @@
 			const lastGeo = /* @__PURE__ */ new Map();
 			const lastLive = /* @__PURE__ */ new Map();
 			let raf = 0;
+			let fallback = 0;
 			const tick = () => {
+				cancelAnimationFrame(raf);
+				clearTimeout(fallback);
 				raf = 0;
+				fallback = 0;
 				try {
 					const geo = {};
 					let geoChanged = false;
@@ -560,7 +565,9 @@
 				}
 			};
 			const kick = () => {
-				if (!raf && (watched.length || inspected.length)) raf = requestAnimationFrame(tick);
+				if (raf || !(watched.length || inspected.length)) return;
+				raf = requestAnimationFrame(tick);
+				fallback = window.setTimeout(tick, FALLBACK_TICK_MS);
 			};
 			new MutationObserver(() => {
 				const removed = reg.rebind();
