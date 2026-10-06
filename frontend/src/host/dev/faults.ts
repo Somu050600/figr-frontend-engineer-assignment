@@ -37,10 +37,8 @@ export function consumeOneShot(kind: OneShot, screenId: string): boolean {
   return true;
 }
 
-export function takeFailNext(endpoint: "screens" | "details"): boolean {
-  const on = useFaults.getState().failNext[endpoint];
-  if (on) useFaults.setState((s) => ({ failNext: { ...s.failNext, [endpoint]: false } }));
-  return on;
+export function disarmFailNext(endpoint: "screens" | "details"): void {
+  if (useFaults.getState().failNext[endpoint]) useFaults.setState((s) => ({ failNext: { ...s.failNext, [endpoint]: false } }));
 }
 
 export function clearPageOverride(screenId: string): void {

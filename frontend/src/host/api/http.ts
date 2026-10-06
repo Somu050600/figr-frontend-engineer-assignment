@@ -1,13 +1,22 @@
 import { API_BASE } from "../config";
-import { takeFailNext, useFaults } from "../dev/faults";
+import { disarmFailNext, useFaults } from "../dev/faults";
 import { BadDataError } from "../errors";
 
-export function apiUrl(path: string, endpoint: "screens" | "details"): string {
+/**
+ * fetch() against the API with dev faults applied. An armed "fail next" fault
+ * applies to every request that starts while it is armed and is cleared by the
+ * first one that completes — so an aborted request (selection changed,
+ * StrictMode's double effect) never uses it up.
+ */
+export async function apiFetch(path: string, endpoint: "screens" | "details", signal: AbortSignal): Promise<Response> {
   const url = new URL(path, API_BASE);
-  const { latencyMs } = useFaults.getState();
+  const { latencyMs, failNext } = useFaults.getState();
   if (latencyMs) url.searchParams.set("latency", String(latencyMs));
-  if (takeFailNext(endpoint)) url.searchParams.set("fail", "1");
-  return url.toString();
+  const failing = failNext[endpoint];
+  if (failing) url.searchParams.set("fail", "1");
+  const res = await fetch(url.toString(), { signal });
+  if (failing) disarmFailNext(endpoint);
+  return res;
 }
 
 /** The API's failure mode includes a 200 with a truncated body — parse defensively. */

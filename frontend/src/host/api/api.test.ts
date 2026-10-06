@@ -50,3 +50,22 @@ describe("fetchScreens", () => {
     await expect(fetchScreens(signal)).rejects.toBeInstanceOf(BadDataError);
   });
 });
+
+describe("dev fail-next fault", () => {
+  it("survives an aborted request and clears on the first completed one", async () => {
+    const f = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.signal?.aborted) throw new DOMException("aborted", "AbortError");
+      return new Response("{}", { status: 404 });
+    });
+    vi.stubGlobal("fetch", f);
+    useFaults.setState({ failNext: { screens: false, details: true } });
+    const ac = new AbortController();
+    ac.abort();
+    await expect(fetchDetails("x", ac.signal)).rejects.toThrow();
+    expect(String(f.mock.calls[0][0])).toContain("fail=1");
+    expect(useFaults.getState().failNext.details).toBe(true);
+    await fetchDetails("x", signal);
+    expect(String(f.mock.calls[1][0])).toContain("fail=1");
+    expect(useFaults.getState().failNext.details).toBe(false);
+  });
+});

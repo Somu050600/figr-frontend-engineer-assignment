@@ -1,6 +1,6 @@
 import { BadDataError, HttpError } from "../errors";
 import type { Screen } from "../state/board";
-import { apiUrl, isString, parseJson } from "./http";
+import { apiFetch, isString, parseJson } from "./http";
 
 const isScreen = (v: unknown): v is Screen => {
   const s = v as Record<string, unknown>;
@@ -8,7 +8,7 @@ const isScreen = (v: unknown): v is Screen => {
 };
 
 export async function fetchScreens(signal: AbortSignal): Promise<Screen[]> {
-  const res = await fetch(apiUrl("/screens", "screens"), { signal });
+  const res = await apiFetch("/screens", "screens", signal);
   if (!res.ok) throw new HttpError(res.status);
   const data = await parseJson(res);
   if (!Array.isArray(data) || !data.every(isScreen)) throw new BadDataError("Unexpected /screens response");

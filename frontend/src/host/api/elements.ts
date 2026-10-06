@@ -1,5 +1,5 @@
 import { BadDataError, HttpError } from "../errors";
-import { apiUrl, isString, parseJson } from "./http";
+import { apiFetch, isString, parseJson } from "./http";
 
 export interface ElementDetails {
   component: string;
@@ -15,7 +15,7 @@ const isDetails = (v: unknown): v is ElementDetails => {
 
 /** Details for a data-key, or null when the API has none (404 is not an error, R5.1). */
 export async function fetchDetails(key: string, signal: AbortSignal): Promise<ElementDetails | null> {
-  const res = await fetch(apiUrl(`/elements/${encodeURIComponent(key)}`, "details"), { signal });
+  const res = await apiFetch(`/elements/${encodeURIComponent(key)}`, "details", signal);
   if (res.status === 404) return null;
   if (!res.ok) throw new HttpError(res.status);
   const data = await parseJson(res);
