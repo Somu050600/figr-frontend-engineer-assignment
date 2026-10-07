@@ -26,6 +26,10 @@ export async function hitTestOnce(screenId: string, p: { x: number; y: number })
 export class HitTester {
   private inflight = false;
   private next: { x: number; y: number } | null = null;
+  /** Bumped by cancel(): a reply for a request sent before the pointer left is dropped. */
+  private gen = 0;
+  /** Last pointer position over this preview, for re-testing after the page scrolls. */
+  last: { x: number; y: number } | null = null;
 
   constructor(
     private readonly screenId: string,
@@ -33,12 +37,15 @@ export class HitTester {
   ) {}
 
   hover(p: { x: number; y: number }): void {
+    this.last = p;
     this.next = p;
     if (!this.inflight) void this.pump();
   }
 
   cancel(): void {
     this.next = null;
+    this.last = null;
+    this.gen++;
   }
 
   private async pump(): Promise<void> {
@@ -47,9 +54,10 @@ export class HitTester {
     this.next = null;
     this.inflight = true;
     const epoch = useHover.getState().epoch;
+    const gen = this.gen;
     try {
       const res = await hitTestOnce(this.screenId, p);
-      if (!res || useHover.getState().epoch !== epoch || useBoard.getState().mode !== "select") return;
+      if (!res || gen !== this.gen || useHover.getState().epoch !== epoch || useBoard.getState().mode !== "select") return;
       if (res.node) {
         useHover.getState().set({ screenId: this.screenId, id: res.node.id, source: "preview", ancestorIds: res.ancestorIds });
       } else {

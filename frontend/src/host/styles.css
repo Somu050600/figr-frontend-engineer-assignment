@@ -59,8 +59,10 @@ kbd { font: 11px ui-monospace, monospace; padding: 0 4px; border: 1px solid var(
 .badge .tip { display: none; position: absolute; left: 0; top: calc(100% + 4px); z-index: 5; max-width: 360px; width: max-content; padding: 6px 8px; border-radius: 4px; background: #18181b; color: #fff; font-weight: 400; white-space: normal; }
 .badge:hover .tip, .badge:focus .tip { display: block; }
 
-.preview .region-error { width: 1280px; height: 800px; }
-.preview .region-error > * { transform: scale(calc(1 / var(--zoom))); }
+/* Error card inside a preview: sized in screen px at any zoom by dividing by --zoom (layout reflows, nothing overlaps). */
+.preview .region-error { width: 1280px; height: 800px; font-size: calc(13px / var(--zoom)); gap: calc(6px / var(--zoom)); padding: calc(16px / var(--zoom)); }
+.preview .region-error .detail { font-size: calc(12px / var(--zoom)); }
+.preview .region-error button { font-size: calc(13px / var(--zoom)); padding: calc(4px / var(--zoom)) calc(12px / var(--zoom)); border-width: calc(1px / var(--zoom)); border-radius: calc(6px / var(--zoom)); }
 
 /* ---- overlay (screen space) ---- */
 .overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }

@@ -133,13 +133,19 @@ export class PreviewConnection {
 
   private startHeartbeat(): void {
     if (this.heartbeat) return;
+    let lastTick = Date.now();
     this.heartbeat = setInterval(() => {
       const now = Date.now();
-      if (now - this.lastSeenAt > TIMEOUTS.heartbeatDeadMs) {
+      // A long gap means *we* weren't running (background-tab throttling, laptop
+      // sleep) — that's no evidence the page is gone. Start a fresh probe instead.
+      const slept = now - lastTick > 3 * TIMEOUTS.heartbeatCheckMs;
+      lastTick = now;
+      const awaitingPong = this.lastPingAt > this.lastSeenAt;
+      if (!slept && awaitingPong && now - this.lastPingAt > TIMEOUTS.heartbeatDeadMs) {
         this.die(new ConnectError("The preview stopped responding"));
         return;
       }
-      if (now - this.lastPingAt >= TIMEOUTS.heartbeatPingMs) {
+      if (slept || (!awaitingPong && now - this.lastPingAt >= TIMEOUTS.heartbeatPingMs)) {
         this.lastPingAt = now;
         this.request("ping", {}, TIMEOUTS.heartbeatDeadMs).catch(() => {});
       }

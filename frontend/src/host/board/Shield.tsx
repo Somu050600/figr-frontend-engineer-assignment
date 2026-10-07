@@ -36,8 +36,17 @@ export function Shield({ screenId }: { screenId: string }) {
   };
 
   const onPointerDown = (e: ReactPointerEvent) => {
-    e.preventDefault(); // no text selection, no focus change
-    if (document.activeElement instanceof HTMLIFrameElement) document.activeElement.blur();
+    e.preventDefault(); // no text selection
+    // Whatever held focus (an iframe left over from Interact mode, the layers search box)
+    // gives it back to the document, so V/I/Esc/Tab reach the host right away (R3.6).
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== document.body) active.blur();
+  };
+
+  // Wheel scrolls the page under a still pointer: re-test so hover follows the content (R2.1).
+  const onWheel = (e: React.WheelEvent) => {
+    const p = tester.last;
+    if (p && !e.ctrlKey && !e.metaKey) region.setTimeout(() => tester.hover(p), 50); // zoom moves the point; skip
   };
 
   const onClick = region.guard(async (e: React.MouseEvent) => {
@@ -65,6 +74,7 @@ export function Shield({ screenId }: { screenId: string }) {
       onPointerMove={onPointerMove}
       onPointerLeave={onPointerLeave}
       onPointerDown={onPointerDown}
+      onWheel={onWheel}
       onClick={onClick}
     />
   );

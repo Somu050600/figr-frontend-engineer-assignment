@@ -3,6 +3,7 @@ import { captureIn } from "../regions/registry";
 import { useBoard } from "../state/board";
 import { useHover } from "../state/hover";
 import { PREVIEW_H, PREVIEW_W, previewOrigin } from "../state/layout";
+import { previewStatus, usePreviews } from "../state/previews";
 import { useSelection } from "../state/selection";
 import { viewport, type Viewport } from "../state/viewport";
 import { geometry } from "./geometry";
@@ -31,6 +32,7 @@ export class Overlay {
       useHover.subscribe(schedule),
       useSelection.subscribe(schedule),
       useBoard.subscribe(schedule),
+      usePreviews.subscribe(schedule),
     ];
     this.schedule();
   }
@@ -68,7 +70,8 @@ export class Overlay {
 
       for (const [screenId, list] of items) {
         const index = screens.findIndex((s) => s.id === screenId);
-        if (index < 0) continue;
+        // Only connected previews get outlines; an errored one shows its error card, clean.
+        if (index < 0 || previewStatus(screenId) !== "ready") continue;
         try {
           if (consumeOneShot("draw", screenId)) throw new Error("Dev: simulated error while drawing");
           this.drawPreview(screenId, index, list, v, used);

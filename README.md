@@ -13,7 +13,7 @@ npm start
 Then open http://localhost:5173. `npm start` installs dependencies if they're missing, builds the page agent, then runs the mock backend (`:4000` API, `:4001` pages), the agent watcher and the Vite dev server together.
 
 - **Node ≥ 22.12** for the app tooling (Vite 8, Vitest 5). The kit's backend alone still runs on Node 18 (`npm run backend`).
-- `npm test` runs the unit tests (83), and `npm run typecheck` runs TypeScript.
+- `npm test` runs the unit tests (93), and `npm run typecheck` runs TypeScript.
 - **Dev menu** (top right, dev builds only) triggers every R6 failure on demand.
 
 Keys: **V** Select, **I** Interact, **Esc** clear, **Enter / Shift+Enter** child / parent, **Tab / Shift+Tab** next / previous sibling, **Ctrl/Cmd + wheel** zoom. With the layers panel focused, the arrow keys move through the tree.
@@ -35,8 +35,8 @@ Each page gets exactly one added line, `<script src="figr-agent.js"></script>`, 
 
 1. **Do page errors go to `report()`?** The brief says *every failure* does, so yes: once per error event, region `preview`. They show as a badge, not a region error.
 2. **Shortcuts in Interact mode.** The page must "behave normally", so Tab and Enter stay native. The agent forwards only **V / I / Esc**, and only when focus isn't in an editable field (typing "i" in the sign-up form must not switch modes). In Select mode, focus can be left inside an iframe from Interact mode. There the agent forwards every shortcut and `preventDefault`s it.
-3. **"Script doesn't respond within 10 seconds."** I apply this both at connect time (no `hello`) and later (a heartbeat ping every 5s; no traffic for 10s). Either way the preview shows "Couldn't connect to this preview".
-4. **Which elements appear in layers.** "Any element", minus non-rendered tags (`script, style, link, meta, template, noscript`). They can't be hovered and would only add noise.
+3. **"Script doesn't respond within 10 seconds."** I apply this both at connect time (no `hello`) and later (a heartbeat ping every 5s; a ping unanswered for 10s). Either way the preview shows "Couldn't connect to this preview". If the host itself wasn't running (background-tab throttling, laptop sleep), the heartbeat sends a fresh ping instead of declaring every preview dead.
+4. **Which elements appear in layers.** "Any element", minus non-rendered tags (`script, style, link, meta, template, noscript, title, head, base`). They can't be hovered and would only add noise.
 5. **Clicking a page's background** counts as clicking in that preview: it becomes active and the selection clears. Clicking empty board space clears the selection but keeps the active preview.
 6. **Navigation vs "no longer exists".** Navigation clears that preview's selection and the inspector shows its empty state. "This element no longer exists" is reserved for DOM removal (R3.7).
 7. **Search** is a case-insensitive substring match on the element name.
@@ -57,7 +57,7 @@ The agent owns *the truth about the page*. The host owns *what the user intends*
 | Screens, mode | `state/board.ts` | Board fetch, toolbar, V/I |
 | Connection status, page errors | `state/previews.ts` | That preview's `PreviewConnection` |
 | Active preview, selection (ordered, most recent last), "gone" notice | `state/selection.ts` | `select()` / `clear()`. A connection may only *remove* ids (page removed them) or clear on navigation |
-| The single hover + an epoch | `state/hover.ts` | Hover actions. Every clear bumps the epoch, so stale hit-test replies are dropped |
+| The single hover + an epoch | `state/hover.ts` | Hover actions. Every clear bumps the epoch, and each preview's hit-tester has its own generation bumped when the pointer leaves, so stale hit-test replies are dropped |
 | Layers tree per preview: nodes, children lists with load state, expanded set, scroll position, search | `layers/store.ts` + pure reducers in `layers/model.ts` | Layers controller + agent pushes |
 | Live inspector values | `state/live.ts` | Agent pushes |
 | Element geometry | `overlay/geometry.ts` (non-React) | Agent pushes; read every frame by the overlay |
@@ -97,7 +97,7 @@ All messages share one envelope: `{ns: "figr", v: 1, docId, kind, reqId?, payloa
 - **Slow:** per-request timeouts. A reply after its timeout finds no pending entry and is dropped.
 - **Gone:**
   - No `hello` within 10s of mount, or after an iframe `load` with no new `hello` (the page navigated somewhere without the agent) → "Couldn't connect to this preview" + Retry.
-  - A silent agent mid-session → the heartbeat catches it.
+  - A silent agent mid-session → the heartbeat catches it (a ping unanswered for 10s).
 - **Replaced (navigation):** a `hello` with a new `docId`. Pending requests to the old document are rejected as *cancelled* (never shown, never reported), messages tagged with the old `docId` are dropped, and that preview's selection, tree and memory reset. Hash links keep the same document, so nothing resets.
 
 ## Identifying elements across re-renders and navigation
@@ -143,11 +143,13 @@ The dev menu triggers each failure on its *real* code path: the server's `?fail=
 ## Where this breaks
 
 - **Identical unkeyed siblings reordered in one batch with the same count** may rebind to the wrong one (rule 6). Two unkeyed siblings that differ only by numbers count as identical because of digit folding.
+- **An unkeyed element *replaced* by a different one that looks the same** is treated as the same element. If the page swaps the only `li` under a parent for another `li` (rules 4–5), or for one whose text differs only in digits ("#1002 Pending" → "#1009 Pending"), the selection moves to the new node. There's no way to tell "rebuilt" from "replaced" without a key.
 - **Unkeyed elements whose only distinguishing feature is changing text** (beyond digits) lose their identity when the page rebuilds them. They're dropped, never mismatched.
 - **`pointer-events: none`** elements are skipped by `elementsFromPoint`, so they can't be hovered from the preview (they're still reachable from the layers panel).
 - **Shadow DOM and nested iframes** inside pages are not traversed.
 - **`position: fixed` elements inside a scrolling ancestor** get clipped by that ancestor's box even though they escape it visually.
 - **Off-screen previews:** browsers stop `requestAnimationFrame` in off-screen cross-origin iframes. The agent falls back to a 150ms timer, which browsers throttle in hidden frames, so geometry and live values update slower until the preview is back on screen.
+- **Late row-load failures for an inactive preview.** Layers state is kept per preview (R4.9), so if you switch away while a row is loading and it then times out, that row shows "Couldn't load" when you come back, and the failure is reported then rather than dropped.
 - **No virtualisation** in the layers panel. Page-5 fully expanded (~1,450 rows) is fine; a 10k-element page would be sluggish.
 - **Hover is one `postMessage` hop behind the pointer.** Very fast movement can lag a frame.
 - **Errors the page catches itself** never reach the agent, so there's no badge for them.
@@ -168,6 +170,8 @@ The dev menu triggers each failure on its *real* code path: the server's `?fail=
 - Tree, reveal, search and relative navigation (`agent/tree.test.ts`).
 - The connection's docId gate, timeouts, late replies, navigation, heartbeat and connect timer (`PreviewConnection.test.ts`).
 - Layers invariants: no duplicates, stale tokens, search restore, keyboard helpers (`layers/model.test.ts`).
+- Layers controller: load once, a row timeout reported once with its late reply ignored, retry counts again, cancelled and reset loads not reported, latest reveal wins (`layers/controller.test.ts`).
+- Hover hit-testing: one request in flight, latest point wins, replies after the pointer left or after a pan/zoom dropped (`board/hitTester.test.ts`).
 - Selection reducers, exactly-once reporting, API validation, zoom maths and the Mixed merge.
 
 ## What I took from public products

@@ -34,6 +34,7 @@ export interface ScreenLayers {
   children: Record<ParentKey, ChildList>;
   expanded: Record<string, true>;
   scrollTop: number;
+  scrollLeft: number;
   search: SearchState | null;
   /** One-shot request for the panel to scroll this row into view. */
   scrollToId: string | null;
@@ -46,6 +47,7 @@ export const emptyLayers = (): ScreenLayers => ({
   children: {},
   expanded: {},
   scrollTop: 0,
+  scrollLeft: 0,
   search: null,
   scrollToId: null,
   revealError: null,

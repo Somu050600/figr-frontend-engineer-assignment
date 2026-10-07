@@ -7,7 +7,7 @@ import { useHover } from "../state/hover";
 import { usePreviews } from "../state/previews";
 import { useSelection } from "../state/selection";
 import { ensureChildren, retryRow, revealNode, setQuery, toggleRow } from "./controller";
-import { arrowLeft, arrowRight, highlightFor, idOfKey, isNodeRow, needsLoad, ROOT, stepRow, visibleRows } from "./model";
+import { arrowLeft, arrowRight, highlightFor, idOfKey, isNodeRow, ROOT, stepRow, visibleRows } from "./model";
 import { INDENT, Row, ROW_H, StatusRow } from "./Row";
 import { EMPTY_LAYERS, getLayers, updateLayers, useLayers } from "./store";
 
@@ -41,9 +41,11 @@ function LayersTree({ screenId }: { screenId: string }) {
   const prevRows = useRef(rows);
 
   // Top level loads once the preview is connected (and again after navigation resets it).
+  // Only when never requested: a failed load waits for the row's Retry (R4.3), it must
+  // not re-fire on its own and report a new failure every 3s.
   const rootState = children[ROOT];
   useEffect(() => {
-    if (status === "ready" && needsLoad(getLayers(screenId), ROOT)) region.guard(ensureChildren)(screenId, null);
+    if (status === "ready" && !getLayers(screenId).children[ROOT]) region.guard(ensureChildren)(screenId, null);
   }, [status, rootState, screenId, region]);
 
   // Selecting in the preview reveals the row, loading ancestors if needed (R4.5).
@@ -65,12 +67,24 @@ function LayersTree({ screenId }: { screenId: string }) {
   // Restore this preview's scroll position on activation; save it when switching away (R4.9).
   useLayoutEffect(() => {
     const el = scrollRef.current!;
-    el.scrollTop = getLayers(screenId).scrollTop;
+    const saved = getLayers(screenId);
+    el.scrollTop = saved.scrollTop;
+    el.scrollLeft = saved.scrollLeft;
     return () => {
       const top = el.scrollTop;
-      if (useLayers.getState().byScreen[screenId]) updateLayers(screenId, (s) => ({ ...s, scrollTop: top }));
+      const left = el.scrollLeft;
+      if (useLayers.getState().byScreen[screenId]) updateLayers(screenId, (s) => ({ ...s, scrollTop: top, scrollLeft: left }));
     };
   }, [screenId]);
+
+  // The preview navigated (its layers state was reset): start the new page at the top.
+  useLayoutEffect(() => {
+    if (rootState) return;
+    const el = scrollRef.current!;
+    el.scrollTop = 0;
+    el.scrollLeft = 0;
+    anchor.current = null;
+  }, [rootState]);
 
   // When rows change under the user (page DOM changes), keep the first visible row where it was (R4.10).
   useLayoutEffect(() => {

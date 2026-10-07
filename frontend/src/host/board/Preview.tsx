@@ -8,6 +8,8 @@ import { ConnectError } from "../errors";
 import { geometry } from "../overlay/geometry";
 import { Region, useRegion } from "../regions/Region";
 import { useBoard, type Screen } from "../state/board";
+import { clearHoverForScreen } from "../state/hover";
+import { useLive } from "../state/live";
 import { PREVIEW_H, PREVIEW_W, previewOrigin } from "../state/layout";
 import { usePreviews } from "../state/previews";
 import { resetScreen } from "../state/reset";
@@ -88,12 +90,26 @@ function Preview({ screen }: { screen: Screen }) {
       iframe.removeEventListener("load", onLoad);
       conn.dispose();
       setConnection(screen.id, null);
+      // The page is gone (region error, retry, unmount): nothing it reported may linger.
+      usePreviews.getState().setStatus(screen.id, "error");
+      geometry.clearScreen(screen.id);
+      clearHoverForScreen(screen.id);
+      useLive.getState().clearScreen(screen.id);
     };
   }, [region, screen.id, screen.url]);
 
   return (
     <>
-      <iframe ref={iframeRef} className="preview-iframe" src={src} title={screen.name} width={PREVIEW_W} height={PREVIEW_H} />
+      <iframe
+        ref={iframeRef}
+        className="preview-iframe"
+        src={src}
+        title={screen.name}
+        width={PREVIEW_W}
+        height={PREVIEW_H}
+        // Select mode: Tab must never move focus into a page (R1.5 "inputs don't get focus").
+        tabIndex={mode === "select" ? -1 : undefined}
+      />
       {mode === "select" && <Shield screenId={screen.id} />}
     </>
   );

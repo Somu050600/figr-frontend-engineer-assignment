@@ -88,6 +88,24 @@ describe("PreviewConnection", () => {
     expect(events.onDead).toHaveBeenCalledTimes(1);
   });
 
+  it("survives a long gap between heartbeat ticks (throttled tab, laptop sleep)", () => {
+    const { conn, events, sent, fromPage, reply } = setup();
+    fromPage(envelope("doc-a", "hello", {}));
+    reply(sent[0], { ok: true }); // init
+    vi.advanceTimersByTime(TIMEOUTS.heartbeatPingMs + TIMEOUTS.heartbeatCheckMs);
+    reply(sent.findLast((m) => m.kind === "ping")!, { ok: true });
+    // Simulate the host's interval not running for a minute, then resuming.
+    vi.setSystemTime(Date.now() + 60_000);
+    vi.advanceTimersByTime(TIMEOUTS.heartbeatCheckMs);
+    expect(events.onDead).not.toHaveBeenCalled();
+    // A fresh ping went out; the page answers → still alive.
+    const ping = sent.findLast((m) => m.kind === "ping")!;
+    reply(ping, { ok: true });
+    vi.advanceTimersByTime(TIMEOUTS.heartbeatDeadMs);
+    expect(events.onDead).not.toHaveBeenCalled();
+    expect(conn.alive).toBe(true);
+  });
+
   it("stays alive while the page keeps answering pings", () => {
     const { events, sent, fromPage, reply } = setup();
     fromPage(envelope("doc-a", "hello", {}));
