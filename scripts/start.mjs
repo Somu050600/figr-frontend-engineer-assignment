@@ -2,12 +2,27 @@
 // backend (:4000/:4001), agent watcher and the Vite dev server (:5173) together.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import net from "node:net";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const shell = process.platform === "win32";
 const run = (cmd, args) => spawnSync(cmd, args, { cwd: root, stdio: "inherit", shell });
+
+// Fail fast with a readable message if something (often a previous run) holds a port.
+const busy = [];
+for (const port of [4000, 4001, 5173]) {
+  const free = await new Promise((resolve) => {
+    const srv = net.createServer().once("error", () => resolve(false));
+    srv.once("listening", () => srv.close(() => resolve(true))).listen(port);
+  });
+  if (!free) busy.push(port);
+}
+if (busy.length) {
+  console.error(`[start] port${busy.length > 1 ? "s" : ""} ${busy.join(", ")} already in use — is another \`npm start\` still running? Stop it and try again.`);
+  process.exit(1);
+}
 
 if (!existsSync(path.join(root, "node_modules"))) {
   console.log("[start] installing dependencies…");
